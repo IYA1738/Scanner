@@ -5,10 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/http/httptrace"
 	"sync"
 	"time"
 
-	"example.com/scanner_demo/config"
+	"example.com/scanner_demo/scanner/internal/config"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -47,7 +48,10 @@ const (
 	backoffTime = 10 * time.Minute
 )
 
-func NewRPCClient(cfg config.RPCConfig) (*RpcClient, error) {
+func NewRPCClient(ctx context.Context, cfg config.RPCConfig) (_ *RpcClient, retErr error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if len(cfg.URL) == 0 {
 		return nil, errors.New("HTTP RPC URLs are empty")
 	}
@@ -57,11 +61,31 @@ func NewRPCClient(cfg config.RPCConfig) (*RpcClient, error) {
 	}
 
 	var httpClients []*ethclient.Client
+	var wsClients []*ethclient.Client
 	var errs []error
+	defer func() {
+		if retErr == nil {
+			return
+		}
+		for _, c := range httpClients {
+			c.Close()
+		}
+		for _, c := range wsClients {
+			c.Close()
+		}
+	}()
 
 	for _, url := range cfg.URL {
-		c, err := ethclient.Dial(url)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		c, err := ethclient.DialContext(ctx, url)
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
+
 			errs = append(errs, fmt.Errorf("HTTP RPC %s: %w", url, err))
 			continue
 		}
@@ -74,11 +98,30 @@ func NewRPCClient(cfg config.RPCConfig) (*RpcClient, error) {
 	}
 	errs = nil
 
-	var wsClients []*ethclient.Client
-
 	for _, url := range cfg.WS_URL {
-		w, err := ethclient.Dial(url)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		// 当前 WebSocket 依赖在握手读取期间不会主动监听取消。
+		// 仅在建立连接期间注册关闭回调，成功后解除。
+		var stopClose func() bool
+		dialCtx := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+			GotConn: func(info httptrace.GotConnInfo) {
+				if info.Conn != nil {
+					stopClose = context.AfterFunc(ctx, func() {
+						info.Conn.Close()
+					})
+				}
+			},
+		})
+		w, err := ethclient.DialContext(dialCtx, url)
+		if stopClose != nil {
+			stopClose()
+		}
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
 			errs = append(errs, fmt.Errorf("WS RPC %s: %w", url, err))
 			continue
 		}
@@ -87,11 +130,10 @@ func NewRPCClient(cfg config.RPCConfig) (*RpcClient, error) {
 	}
 
 	if len(wsClients) == 0 {
-		for _, c := range httpClients {
-			c.Close()
-		}
-
 		return nil, fmt.Errorf("all WS RPC nodes failed: %w", errors.Join(errs...))
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	r := &RpcClient{

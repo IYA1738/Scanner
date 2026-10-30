@@ -2,14 +2,17 @@ package scanner
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
-	"example.com/scanner_demo/config"
-	"example.com/scanner_demo/database"
-	"example.com/scanner_demo/domain"
-	"example.com/scanner_demo/rpc"
+	"example.com/scanner_demo/scanner/internal/config"
+	"example.com/scanner_demo/scanner/internal/database"
+	"example.com/scanner_demo/scanner/internal/domain"
+	"example.com/scanner_demo/scanner/internal/notify/tg"
+	"example.com/scanner_demo/scanner/internal/rpc"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 )
@@ -36,6 +39,7 @@ type Scanner struct {
 	ChainID    int64
 	Client     *rpc.RpcClient
 	DB         *database.Database
+	publisher  *tg.TGPublisher
 	tokenCache map[common.Address]domain.TokenInfo
 	cfg        config.ScannerConfig
 	nextBlock  uint64
@@ -47,6 +51,7 @@ func NewScanner(
 	chainID int64,
 	client *rpc.RpcClient,
 	db *database.Database,
+	publisher *tg.TGPublisher,
 ) (*Scanner, error) {
 	s := &Scanner{
 		ctx:        ctx,
@@ -54,6 +59,7 @@ func NewScanner(
 		ChainID:    chainID,
 		Client:     client,
 		DB:         db,
+		publisher:  publisher,
 		tokenCache: make(map[common.Address]domain.TokenInfo),
 	}
 
@@ -258,7 +264,15 @@ func (s *Scanner) ProcessBlock(ctx context.Context, block *types.Block, receipts
 				continue
 			}
 
-			// TODO: 解析 V3 PoolCreated
+			uniV3PoolCreateEvent, err := s.ParseUniV3PoolCreate(log)
+			if err != nil {
+				continue
+			}
+			if err := s.publisher.PublishToChat(
+				ctx, "DM", tg.TGEventNewV3Pool, uniV3PoolCreateEvent,
+			); err != nil {
+				slog.Error("投递新池通知失败", "chain_id", s.ChainID, "error", err)
+			}
 
 		case domain.V4InitializeTopic:
 			if log.Address != s.cfg.Constants.UniV4PoolManager ||
@@ -311,6 +325,7 @@ func (s *Scanner) ProcessBlock(ctx context.Context, block *types.Block, receipts
 			// TODO: 解析 V4 Swap
 		}
 	}
+	return nil
 }
 
 func (s *Scanner) Worker(
@@ -429,4 +444,19 @@ func (s *Scanner) FetchBlocks(ctx context.Context, task job) ([]blockData, error
 		}
 	}
 	return blocks, nil
+}
+
+func (s *Scanner) ParseUniV3PoolCreate(log *types.Log) (*domain.UniV3PoolCreate, error) {
+	if log == nil {
+		return nil, fmt.Errorf("log is nil")
+	}
+	fee := uint32(log.Topics[3][29])<<16 | uint32(log.Topics[3][30])<<8 | uint32(log.Topics[3][31])
+	tickSpacing := int32(binary.BigEndian.Uint32(log.Data[28:32]))
+	return &domain.UniV3PoolCreate{
+		Token0:      common.Address(log.Topics[1][12:]),
+		Token1:      common.Address(log.Topics[2][12:]),
+		Fee:         fee,
+		TickSpacing: tickSpacing,
+		Pool:        common.Address(log.Data[44:64]),
+	}, nil
 }

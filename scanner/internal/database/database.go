@@ -1,12 +1,13 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
 
-	"example.com/scanner_demo/config"
-	"example.com/scanner_demo/database/model"
+	"example.com/scanner_demo/scanner/internal/config"
+	"example.com/scanner_demo/scanner/internal/database/model"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -16,12 +17,17 @@ type Database struct {
 	sqlDB *sql.DB
 }
 
-func NewDatabase(cfg config.DatabaseConfig) (*Database, error) {
+func NewDatabase(ctx context.Context, cfg config.DatabaseConfig) (_ *Database, retErr error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%d sslmode=disable",
 		cfg.Host, cfg.User, cfg.Password, cfg.DBName, cfg.Port,
 	)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		DisableAutomaticPing: true,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -30,17 +36,29 @@ func NewDatabase(cfg config.DatabaseConfig) (*Database, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if retErr != nil {
+			sqlDB.Close()
+		}
+	}()
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return nil, err
+	}
 
 	sqlDB.SetMaxOpenConns(10)
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 
-	if err := db.AutoMigrate(&model.ScannerCursor{}); err != nil {
+	initDB := db.WithContext(ctx)
+	if err := initDB.AutoMigrate(&model.ScannerCursor{}); err != nil {
 		return nil, fmt.Errorf("migrate scanner cursor: %w", err)
 	}
 
-	if err := db.AutoMigrate(&model.AddressBlacklist{}); err != nil {
+	if err := initDB.AutoMigrate(&model.AddressBlacklist{}); err != nil {
 		return nil, fmt.Errorf("migrate address blacklist: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	return &Database{

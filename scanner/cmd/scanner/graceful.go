@@ -13,8 +13,8 @@ type Manager struct {
 	wg           sync.WaitGroup
 }
 
-func NewManager() *Manager {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewManager(parent context.Context) *Manager {
+	ctx, cancel := context.WithCancel(parent)
 	return &Manager{
 		ctx:    ctx,
 		cancel: cancel,
@@ -36,6 +36,7 @@ func (m *Manager) AddCleanup(fn func() error) {
 
 func (m *Manager) Shutdown() error {
 	m.cancel()
+	m.wg.Wait()
 
 	var errs []error
 	for i := len(m.cleanupFuncs) - 1; i >= 0; i-- {
@@ -43,7 +44,5 @@ func (m *Manager) Shutdown() error {
 			errs = append(errs, err)
 		}
 	}
-
-	m.wg.Wait()
 	return errors.Join(errs...)
 }

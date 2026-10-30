@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"os"
 
-	"example.com/scanner_demo/config"
+	"example.com/scanner_demo/scanner/internal/config"
 )
 
 func NewLogger(cfg config.LogConfig) (*slog.Logger, error) {

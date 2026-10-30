@@ -29,9 +29,10 @@ type RPCConfig struct {
 }
 
 type ChainConfig struct {
-	ChainID    int           `json:"chain_id"`
-	RPCCfg     RPCConfig     `json:"rpc_config"`
-	ScannerCfg ScannerConfig `json:"scanner_config"`
+	ChainID     int           `json:"chain_id"`
+	ExplorerURL string        `json:"explorer_url"`
+	RPCCfg      RPCConfig     `json:"rpc_config"`
+	ScannerCfg  ScannerConfig `json:"scanner_config"`
 }
 
 type LogConfig struct {

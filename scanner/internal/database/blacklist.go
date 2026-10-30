@@ -3,7 +3,7 @@ package database
 import (
 	"context"
 
-	"example.com/scanner_demo/database/model"
+	"example.com/scanner_demo/scanner/internal/database/model"
 	"gorm.io/gorm/clause"
 )
 
