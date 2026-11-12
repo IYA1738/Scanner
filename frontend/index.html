@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="登录 Scanner，进入你的模块工作台。" />
+    <title>登录 · Scanner</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/portal.css" />
+  </head>
+  <body class="portal login-page">
+    <header class="portal-header">
+      <div class="portal-header-content">
+        <a class="portal-brand" href="/" aria-label="Scanner 首页">
+          <svg viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <path d="M5 10V5h5m8 0h5v5m0 8v5h-5m-8 0H5v-5M9 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Scanner</span>
+        </a>
+        <span class="preview-badge">前端预览</span>
+      </div>
+    </header>
+
+    <main class="login-main">
+      <div class="login-panel">
+        <div class="login-intro">
+          <svg class="login-symbol" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+            <rect x="1" y="1" width="62" height="62" rx="19" fill="currentColor" />
+            <path d="M20 26v-6h6m12 0h6v6m0 12v6h-6m-12 0h-6v-6M25 32h14" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <h1>欢迎回来。</h1>
+          <p>登录 Scanner，进入你的工作台。</p>
+        </div>
+
+        <form id="login-form" class="login-form" method="post" action="/">
+          <p class="form-note">账号和密码均为必填。</p>
+          <div class="form-field">
+            <label for="username">账号</label>
+            <input id="username" name="username" type="text" autocomplete="username" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="next" placeholder="输入账号或邮箱" required />
+          </div>
+          <div class="form-field">
+            <label for="password">密码</label>
+            <div class="password-field">
+              <input id="password" name="password" type="password" autocomplete="current-password" enterkeyhint="done" placeholder="输入密码" required />
+              <button id="toggle-password" class="password-toggle" type="button" aria-label="显示密码" aria-controls="password" aria-pressed="false" disabled>显示</button>
+            </div>
+          </div>
+          <button id="login-submit" class="login-submit" type="submit" disabled>登录</button>
+          <p id="login-status" class="form-status" role="status" aria-atomic="true"></p>
+        </form>
+
+        <div class="preview-entry">
+          <a class="preview-link" href="/workspace.html">
+            预览工作台 <span aria-hidden="true">→</span>
+          </a>
+          <p>登录服务待接入，现可直接预览页面。</p>
+        </div>
+        <noscript><p class="no-script">请启用 JavaScript 使用登录表单，或直接预览工作台。</p></noscript>
+      </div>
+    </main>
+
+    <footer class="portal-footer">
+      <span>Scanner</span>
+      <span>一个入口，连接你的工作。</span>
+    </footer>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

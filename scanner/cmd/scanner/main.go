@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,20 +13,25 @@ import (
 
 	"example.com/scanner_demo/scanner/internal/config"
 	"example.com/scanner_demo/scanner/internal/database"
+	"example.com/scanner_demo/scanner/internal/events"
 	"example.com/scanner_demo/scanner/internal/logger"
 	"example.com/scanner_demo/scanner/internal/notify/tg"
 	"example.com/scanner_demo/scanner/internal/rpc"
 	"example.com/scanner_demo/scanner/internal/scanner"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
-	if err := run(); err != nil {
+	fromHead := flag.Bool("from-head", false, "启动时从当前链头开始，忽略已保存的游标")
+	flag.Parse()
+
+	if err := run(*fromHead); err != nil {
 		slog.Error("application failed", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run() (runErr error) {
+func run(fromHead bool) (runErr error) {
 	cfg, err := config.LoadConfig("./config.json")
 	if err != nil {
 		return err
@@ -53,6 +59,14 @@ func run() (runErr error) {
 		}
 		return fmt.Errorf("初始化数据库: %w", err)
 	}
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:                  "127.0.0.1:6379",
+		DB:                    0,
+		ContextTimeoutEnabled: true,
+	})
+
+	manager.AddCleanup(redisClient.Close)
 	manager.AddCleanup(db.Close)
 
 	// 每个链有两个后台任务 每个任务最多报错一次
@@ -63,6 +77,8 @@ func run() (runErr error) {
 			errCh <- fmt.Errorf("%s %s: %w", chainName, task, err)
 		}
 	}
+
+	eventPublisher := events.NewEventPublisher(redisClient)
 
 	for chainName, chainCfg := range cfg.Chains {
 		if signalCtx.Err() != nil {
@@ -91,6 +107,7 @@ func run() (runErr error) {
 			client,
 			db,
 			publisher,
+			eventPublisher,
 		)
 		if err != nil {
 			return fmt.Errorf("%s 初始化 Scanner: %w", chainName, err)
@@ -99,7 +116,7 @@ func run() (runErr error) {
 			reportError(chainName, "TG消费", publisher.ConsumeMessage(ctx))
 		})
 		manager.Go(func(ctx context.Context) {
-			reportError(chainName, "扫链", s.Run())
+			reportError(chainName, "扫链", s.Run(fromHead))
 		})
 		log.Info("链服务已启动", "chain", chainName)
 	}

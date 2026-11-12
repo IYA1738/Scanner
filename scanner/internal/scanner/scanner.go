@@ -11,6 +11,7 @@ import (
 	"example.com/scanner_demo/scanner/internal/config"
 	"example.com/scanner_demo/scanner/internal/database"
 	"example.com/scanner_demo/scanner/internal/domain"
+	"example.com/scanner_demo/scanner/internal/events"
 	"example.com/scanner_demo/scanner/internal/notify/tg"
 	"example.com/scanner_demo/scanner/internal/rpc"
 	"github.com/ethereum/go-ethereum/common"
@@ -19,7 +20,7 @@ import (
 
 // scanner需要把block和receipts拿到作为fetch结果 而不是只拿block
 type blockData struct {
-	block    *types.Block
+	block    *rpc.ScanBlock
 	receipts types.Receipts
 }
 
@@ -35,14 +36,15 @@ type jobResult struct {
 }
 
 type Scanner struct {
-	ctx        context.Context
-	ChainID    int64
-	Client     *rpc.RpcClient
-	DB         *database.Database
-	publisher  *tg.TGPublisher
-	tokenCache map[common.Address]domain.TokenInfo
-	cfg        config.ScannerConfig
-	nextBlock  uint64
+	ctx            context.Context
+	ChainID        int64
+	Client         *rpc.RpcClient
+	DB             *database.Database
+	publisher      *tg.TGPublisher
+	tokenCache     map[common.Address]domain.TokenInfo
+	cfg            config.ScannerConfig
+	nextBlock      uint64
+	redisPublisher *events.EventPublisher
 }
 
 func NewScanner(
@@ -52,15 +54,17 @@ func NewScanner(
 	client *rpc.RpcClient,
 	db *database.Database,
 	publisher *tg.TGPublisher,
+	redisPublisher *events.EventPublisher,
 ) (*Scanner, error) {
 	s := &Scanner{
-		ctx:        ctx,
-		cfg:        cfg,
-		ChainID:    chainID,
-		Client:     client,
-		DB:         db,
-		publisher:  publisher,
-		tokenCache: make(map[common.Address]domain.TokenInfo),
+		ctx:            ctx,
+		cfg:            cfg,
+		ChainID:        chainID,
+		Client:         client,
+		DB:             db,
+		publisher:      publisher,
+		tokenCache:     make(map[common.Address]domain.TokenInfo),
+		redisPublisher: redisPublisher,
 	}
 
 	// TODO: 从数据库加载本链的 Token Metadata 到缓存
@@ -80,21 +84,26 @@ func (s *Scanner) activeWorkers(blockNum uint64, k uint64) int {
 	return int(res)
 }
 
-func (s *Scanner) Run() error {
-	cursor, err := s.DB.GetScannerCursor(s.ctx, s.ChainID)
-	if err != nil {
-		return err
+func (s *Scanner) Run(fromHead bool) error {
+	s.nextBlock = 0
+	if !fromHead {
+		cursor, err := s.DB.GetScannerCursor(s.ctx, s.ChainID)
+		if err != nil {
+			return err
+		}
+		if cursor != nil {
+			s.nextBlock = cursor.BlockNumber + 1
+		}
 	}
 
-	if cursor == nil {
+	if s.nextBlock == 0 {
 		head, err := s.Client.BlockNumber(s.ctx)
 		if err != nil {
 			return err
 		}
 		s.nextBlock = head
-	} else {
-		s.nextBlock = cursor.BlockNumber + 1
 	}
+	slog.Info("扫链起点", "chain_id", s.ChainID, "block", s.nextBlock, "from_head", fromHead)
 
 	// 扫链主循环
 	for {
@@ -201,7 +210,7 @@ func (s *Scanner) Run() error {
 							break collect
 						}
 						height := ready.task.fromBlock + uint64(i)
-						if data.block == nil || data.block.NumberU64() != height {
+						if data.block == nil || data.block.Number != height {
 							batchErr = fmt.Errorf(
 								"unordered or missing block at height %d", height,
 							)
@@ -241,7 +250,7 @@ func (s *Scanner) Run() error {
 	}
 }
 
-func (s *Scanner) ProcessBlock(ctx context.Context, block *types.Block, receipts types.Receipts) error {
+func (s *Scanner) ProcessBlock(ctx context.Context, block *rpc.ScanBlock, receipts types.Receipts) error {
 	if err := context.Cause(ctx); err != nil {
 		return err
 	}
@@ -268,6 +277,23 @@ func (s *Scanner) ProcessBlock(ctx context.Context, block *types.Block, receipts
 			if err != nil {
 				continue
 			}
+
+			event := domain.ScannerEvent{
+				EventID: fmt.Sprintf(
+					"%d:%s:%d",
+					s.ChainID,
+					block.Hash.Hex(),
+					log.Index,
+				),
+				EventType: "univ3.pool_created",
+				ChainID:   s.ChainID,
+				Data:      uniV3PoolCreateEvent,
+			}
+
+			if err := s.redisPublisher.Publish(ctx, event); err != nil {
+				slog.Error("Redis推送失败", "chain_id", s.ChainID, "error", err)
+			}
+
 			if err := s.publisher.PublishToChat(
 				ctx, "DM", tg.TGEventNewV3Pool, uniV3PoolCreateEvent,
 			); err != nil {
@@ -416,16 +442,16 @@ func (s *Scanner) FetchBlocks(ctx context.Context, task job) ([]blockData, error
 			return nil, fmt.Errorf("fetch block %d: %w", i, err)
 		}
 
-		if block == nil || block.NumberU64() != i {
+		if block == nil || block.Number != i {
 			return nil, fmt.Errorf("invalid block at height %d", i)
 		}
 
-		receipts, err := s.Client.BlockReceipts(ctx, block.Hash())
+		receipts, err := s.Client.BlockReceipts(ctx, block.Hash)
 		if err != nil {
 			return nil, fmt.Errorf("fetch receipts for block %d: %w", i, err)
 		}
 
-		txs := block.Transactions()
+		txs := block.Transactions
 
 		if len(txs) != len(receipts) {
 			return nil, fmt.Errorf(

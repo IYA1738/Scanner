@@ -1,0 +1,26 @@
+@layer base, layout, components;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --canvas: #fff;
+    --surface: #fff;
+    --ink: #1d1d1f;
+    --muted: #62626a;
+    --line: #d2d2d7;
+    --accent: #0066cc;
+    --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    background: var(--canvas);
+    font-synthesis: none;
+  }
+
+  body { margin: 0; min-block-size: 100svh; line-height: 1.5; }
+  :where(h1, h2, h3, p, dl, dd, ol) { margin: 0; }
+  :where(h1, h2, h3) { line-height: 1.25; }
+  :where(svg) { display: block; flex-shrink: 0; }
+  :where(a) { color: inherit; }
+  :where(button, input) { font: inherit; }
+  :where(a, button, input, summary):focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+}

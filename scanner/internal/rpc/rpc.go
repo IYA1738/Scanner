@@ -2,15 +2,17 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
+	"log/slog"
 	"net/http/httptrace"
 	"sync"
 	"time"
 
 	"example.com/scanner_demo/scanner/internal/config"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
@@ -34,6 +36,28 @@ type RpcClient struct {
 type RpcState struct {
 	Failures     int
 	BackoffUntil time.Time
+}
+
+type ScanTransaction struct {
+	Hash      common.Hash     `json:"hash"`
+	Type      hexutil.Uint64  `json:"type"`
+	From      *common.Address `json:"from"`
+	To        *common.Address `json:"to"`
+	Value     *hexutil.Big    `json:"value"`
+	Input     hexutil.Bytes   `json:"input"`
+	DecodeErr error           `json:"-"`
+	Raw       json.RawMessage `json:"-"`
+}
+
+type ScanBlock struct {
+	Number        uint64            `json:"number"`
+	Hash          common.Hash       `json:"hash"`
+	ParentHash    common.Hash       `json:"parentHash"`
+	Timestamp     *hexutil.Uint64   `json:"timestamp"`
+	GasUsed       hexutil.Uint64    `json:"gasUsed"`
+	GasLimit      hexutil.Uint64    `json:"gasLimit"`
+	BaseFeePerGas *hexutil.Big      `json:"baseFeePerGas,omitempty"`
+	Transactions  []ScanTransaction `json:"transactions"`
 }
 
 type Protocol uint8
@@ -371,27 +395,65 @@ func (r *RpcClient) BlockNumber(ctx context.Context) (uint64, error) {
 func (r *RpcClient) BlockByNumber(
 	ctx context.Context,
 	blockNumber uint64,
-) (*types.Block, error) {
-	var block *types.Block
+) (*ScanBlock, error) {
+	var result *struct {
+		ScanBlock
+		Number       *hexutil.Uint64   `json:"number"`
+		Transactions []json.RawMessage `json:"transactions"`
+	}
 
 	err := r.Execute(ctx, func(reqCtx context.Context, client *ethclient.Client) error {
-		result, err := client.BlockByNumber(
+		result = nil
+		if err := client.Client().CallContext(
 			reqCtx,
-			new(big.Int).SetUint64(blockNumber),
-		)
-		if err != nil {
+			&result,
+			"eth_getBlockByNumber",
+			hexutil.EncodeUint64(blockNumber),
+			true,
+		); err != nil {
 			return err
 		}
-
-		block = result
+		if result == nil {
+			return fmt.Errorf("block %d not found", blockNumber)
+		}
+		if result.Number == nil || uint64(*result.Number) != blockNumber ||
+			result.Hash == (common.Hash{}) || result.Timestamp == nil || result.Transactions == nil {
+			return fmt.Errorf("invalid block %d", blockNumber)
+		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("get block number=%d: %w", blockNumber, err)
 	}
 
-	return block, nil
+	txs := make([]ScanTransaction, len(result.Transactions))
+	for i, txRaw := range result.Transactions {
+		txs[i].Raw = txRaw
+
+		var tx ScanTransaction
+		err := json.Unmarshal(txRaw, &tx)
+		if err == nil && tx.Hash == (common.Hash{}) {
+			err = errors.New("missing or zero transaction hash")
+		}
+		if err != nil {
+			txs[i].DecodeErr = err
+			slog.Warn(
+				"Transaction decode failed",
+				"block", blockNumber,
+				"index", i,
+				"error", err,
+			)
+			continue
+		}
+
+		tx.Raw = txRaw
+		txs[i] = tx
+	}
+
+	block := result.ScanBlock
+	block.Number = uint64(*result.Number)
+	block.Transactions = txs
+	return &block, nil
 }
 
 func (r *RpcClient) BlockReceipts(ctx context.Context, hash common.Hash) (types.Receipts, error) {

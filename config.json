@@ -1,0 +1,64 @@
+
+{
+  "chains": {
+    "bsc": {
+      "chain_id": 56,
+      "explorer_url":"https://bscscan.com",
+      "rpc_config": {
+        "http_url": ["https://bsc-dataseed.bnbchain.org", "https://bsc-dataseed1.defibit.io", "https://bsc-dataseed2.defibit.io", "https://bsc-dataseed3.ninicoin.io"],
+        "ws_url": ["wss://bsc-rpc.publicnode.com"],
+        "rpc_timeout": 10,
+        "retry_count": 3,
+        "retry_interval": 2
+      },
+      "scanner_config":{
+        "workers_num":4,
+        "block_time_ms":500,
+        "group_size":10,
+        "constants": {
+          "uni_v3_factory":"0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7",
+          "uni_v4_poolmanager":"0x28e2ea090877bf75740558f6bfb36a5ffee9e9df"
+        }
+      }
+    },
+    "robinhood": {
+      "chain_id": 4663,
+      "explorer_url":"https://robinhoodchain.blockscout.com",
+      "rpc_config": {
+        "http_url": ["https://robinhood-rpc.publicnode.com", "https://rpc.degenprotocol.io/robinhood", "https://rpc-robinhood.blockmachine.io", "https://robinhood.api.pocket.network"],
+        "ws_url": ["wss://robinhood.api.pocket.network"],
+        "rpc_timeout": 10,
+        "retry_count": 3,
+        "retry_interval": 2
+      },
+      "scanner_config":{
+        "workers_num":4,
+        "block_time_ms":500,
+        "group_size":10,
+        "constants": {
+          "uni_v3_factory":"0x1f7d7550B1b028f7571E69A784071F0205FD2EfA",
+          "uni_v4_poolmanager":"0x8366a39CC670B4001A1121B8F6A443A643e40951"
+        }
+      }
+    }
+  },
+  "logger":{
+    "level": "info",
+    "format": "json"
+  },
+  "database": {
+    "dbname": "scanner",
+    "host": "localhost",
+    "port": 5432,
+    "user": "postgres",
+    "password": "123456"
+  },
+  "tg":{
+    "bot_token":"8787199508:AAGHxZV9ZrpzVY7IdgmMrs6of63aZ44Rd5E",
+    "chat_id":{
+      "DM":1129893272
+    },
+    "tg_timeout":5,
+    "tg_avtive":true
+  }
+}

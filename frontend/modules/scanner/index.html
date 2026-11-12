@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="实时查看扫链服务推送的链上事件。" />
+    <title>扫链事件 · Scanner</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/module.css" />
+    <link rel="stylesheet" href="/modules/scanner/style.css" />
+  </head>
+  <body data-theme="module">
+    <header class="topbar">
+      <div class="topbar-content">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <rect width="36" height="36" rx="10" fill="currentColor" />
+            <path d="M10 14v-4h4m8 0h4v4m0 8v4h-4m-8 0h-4v-4M14 18h8" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span class="brand-name">Scanner</span>
+        </div>
+        <nav class="module-navigation" aria-label="模块导航">
+          <a href="/workspace.html">所有模块</a>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">扫链事件</span>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page">
+      <header class="page-header">
+        <div class="page-intro">
+          <p class="eyebrow">Scanner / events</p>
+          <h1>扫链事件</h1>
+          <p class="description">汇集扫链服务推送的事件，实时查看链上动态。</p>
+        </div>
+        <div class="stream-state">
+          <p class="stream-label">事件连接</p>
+          <p id="connection" class="connection" data-state="connecting" role="status" aria-atomic="true">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="connection-text">正在连接</span>
+          </p>
+          <p class="stream-caption">新事件会自动更新到列表中</p>
+        </div>
+      </header>
+
+      <section class="feed">
+        <header class="section-header">
+          <div class="section-title">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 7h16M4 12h10M4 17h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+            <h2>最新事件</h2>
+            <span id="event-count">0 条事件</span>
+          </div>
+          <span class="sort-order">最新接收优先 <span aria-hidden="true">↓</span></span>
+        </header>
+        <div id="empty-state" class="empty-state">
+          <svg class="empty-symbol" viewBox="0 0 80 80" fill="none" aria-hidden="true">
+            <rect x="12" y="12" width="56" height="56" rx="18" fill="currentColor" opacity=".08" />
+            <path d="M28 33v-5h5m14 0h5v5m0 14v5h-5m-14 0h-5v-5M24 40h10l4-7 6 14 4-7h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <h3 id="empty-title">等待第一条事件</h3>
+          <p id="empty-message">连接成功后，扫链事件将在这里自动更新。</p>
+        </div>
+        <ol id="event-list" class="event-list" role="list"></ol>
+      </section>
+
+      <footer class="page-footer">
+        <span>Scanner <span aria-hidden="true">/</span> 扫链事件</span>
+        <span>本页最多展示最近 200 条事件</span>
+      </footer>
+    </main>
+    <script type="module" src="/modules/scanner/main.js"></script>
+  </body>
+</html>

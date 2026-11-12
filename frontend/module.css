@@ -1,0 +1,70 @@
+@layer base {
+  body[data-theme="module"] {
+    --canvas: #fafafa;
+    --surface: #fff;
+    --ink: #171717;
+    --muted: #666;
+    --line: #e5e5e5;
+    --accent: #171717;
+    --accent-soft: #f2f2f2;
+    --success: #21704e;
+    --warning: #8a5b1c;
+    color: var(--ink);
+    background: var(--canvas);
+  }
+}
+
+@layer layout {
+  .topbar { background: var(--surface); color: var(--ink); border-block-end: 1px solid var(--line); }
+  .topbar-content {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem 2rem;
+    max-inline-size: 72rem;
+    margin-inline: auto;
+    padding: 1rem 2rem;
+  }
+  .page { max-inline-size: 72rem; margin-inline: auto; padding: 2.75rem 2rem 2rem; }
+  .page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+    margin-block-end: 3rem;
+  }
+  .page-intro { flex: 1 1 24rem; }
+  .page-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: .75rem 1.5rem;
+    margin-block-start: 1.5rem;
+    color: var(--muted);
+    font-size: .75rem;
+    line-height: 1.8;
+  }
+  .page-footer span > span { margin-inline: .5rem; color: var(--muted); }
+
+  @media (width < 42rem) {
+    .topbar-content { padding: 1rem 1.25rem; }
+    .page { padding: 2rem 1.25rem 1.5rem; }
+    .page-header { gap: 1.5rem; margin-block-end: 1.75rem; }
+    .page-intro { flex-basis: 100%; }
+  }
+}
+
+@layer components {
+  .module-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; color: var(--muted); font-size: .8125rem; }
+  .module-navigation a { display: inline-flex; align-items: center; min-block-size: 2.75rem; text-decoration: none; }
+  .module-navigation a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: .2em; }
+  .module-navigation [aria-current] { color: var(--ink); }
+  .brand { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
+  .brand-mark { inline-size: 1.75rem; block-size: 1.75rem; color: var(--ink); }
+  .brand-name { font-size: 1rem; font-weight: 600; letter-spacing: -.035em; }
+  .eyebrow { margin-block-end: .75rem; color: var(--muted); font: .75rem/1.7 var(--mono); }
+  h1 { font-size: clamp(1.875rem, 1.5rem + 1.5vw, 2.375rem); font-weight: 600; letter-spacing: -.045em; }
+  .description { margin-block-start: .875rem; color: var(--muted); font-size: .875rem; line-height: 1.8; }
+}
