@@ -3,13 +3,17 @@ package scanner
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
+	"math/big"
 	"sync"
 	"time"
 
 	"example.com/scanner_demo/scanner/internal/config"
 	"example.com/scanner_demo/scanner/internal/database"
+	"example.com/scanner_demo/scanner/internal/database/model"
 	"example.com/scanner_demo/scanner/internal/domain"
 	"example.com/scanner_demo/scanner/internal/events"
 	"example.com/scanner_demo/scanner/internal/notify/tg"
@@ -67,8 +71,47 @@ func NewScanner(
 		redisPublisher: redisPublisher,
 	}
 
-	// TODO: 从数据库加载本链的 Token Metadata 到缓存
+	tokens, err := db.GetTokenInfoByChain(
+		ctx,
+		chainID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load token cache chain_id=%d: %w", chainID, err)
+	}
+	for i := range tokens {
+		row := &tokens[i]
 
+		info := domain.TokenInfo{
+			Decimals:       row.Decimals,
+			RefreshEnabled: row.RefreshEnabled,
+		}
+
+		if row.Name != "" {
+			info.Name = &row.Name
+		}
+
+		if row.Symbol != "" {
+			info.Symbol = &row.Symbol
+		}
+
+		if row.Creator != nil {
+			info.Creator = common.HexToAddress(*row.Creator)
+		}
+
+		if row.CreatedAt != nil {
+			info.CreatedAt = *row.CreatedAt
+		}
+
+		if row.TotalSupply != nil {
+			supply, ok := new(big.Int).SetString(*row.TotalSupply, 10)
+			if ok && supply.Sign() >= 0 && supply.BitLen() <= 256 {
+				info.TotalSupply = supply
+			} else {
+				slog.Warn("token totalSupply 无效", "token", row.Addr)
+			}
+		}
+		s.tokenCache[common.HexToAddress(row.Addr)] = info
+	}
 	return s, nil
 }
 
@@ -251,6 +294,8 @@ func (s *Scanner) Run(fromHead bool) error {
 }
 
 func (s *Scanner) ProcessBlock(ctx context.Context, block *rpc.ScanBlock, receipts types.Receipts) error {
+	var pendingEvents []pendingEvent
+	tokenSet := make(map[common.Address]struct{})
 	if err := context.Cause(ctx); err != nil {
 		return err
 	}
@@ -278,27 +323,14 @@ func (s *Scanner) ProcessBlock(ctx context.Context, block *rpc.ScanBlock, receip
 				continue
 			}
 
-			event := domain.ScannerEvent{
-				EventID: fmt.Sprintf(
-					"%d:%s:%d",
-					s.ChainID,
-					block.Hash.Hex(),
-					log.Index,
-				),
-				EventType: "univ3.pool_created",
-				ChainID:   s.ChainID,
-				Data:      uniV3PoolCreateEvent,
-			}
+			pendingEvents = append(pendingEvents,
+				pendingEvent{
+					logIndex: log.Index,
+					data:     uniV3PoolCreateEvent,
+				})
 
-			if err := s.redisPublisher.Publish(ctx, event); err != nil {
-				slog.Error("Redis推送失败", "chain_id", s.ChainID, "error", err)
-			}
-
-			if err := s.publisher.PublishToChat(
-				ctx, "DM", tg.TGEventNewV3Pool, uniV3PoolCreateEvent,
-			); err != nil {
-				slog.Error("投递新池通知失败", "chain_id", s.ChainID, "error", err)
-			}
+			tokenSet[uniV3PoolCreateEvent.Token0] = struct{}{}
+			tokenSet[uniV3PoolCreateEvent.Token1] = struct{}{}
 
 		case domain.V4InitializeTopic:
 			if log.Address != s.cfg.Constants.UniV4PoolManager ||
@@ -350,6 +382,58 @@ func (s *Scanner) ProcessBlock(ctx context.Context, block *rpc.ScanBlock, receip
 
 			// TODO: 解析 V4 Swap
 		}
+	}
+
+	for addr := range tokenSet {
+		info := s.tokenCache[addr]
+		if info.Name != nil &&
+			info.Symbol != nil &&
+			info.Decimals != nil &&
+			info.TotalSupply != nil {
+			delete(tokenSet, addr)
+		}
+	}
+
+	tokens := make([]common.Address, 0, len(tokenSet))
+	for addr := range tokenSet {
+		tokens = append(tokens, addr)
+	}
+	metadata, err := s.Client.FetchTokenMetadata(
+		ctx,
+		tokens,
+		new(big.Int).SetUint64(block.Number),
+	)
+	if err != nil {
+		slog.Warn("token metadata 查询有失败",
+			"chain_id", s.ChainID,
+			"block", block.Number,
+			"error", err,
+		)
+	}
+	for addr, meta := range metadata {
+		info := s.tokenCache[addr]
+		if info.Name == nil && meta.Name != nil {
+			info.Name = meta.Name
+		}
+		if info.Symbol == nil && meta.Symbol != nil {
+			info.Symbol = meta.Symbol
+		}
+		if info.Decimals == nil && meta.Decimals != nil {
+			info.Decimals = meta.Decimals
+		}
+		if info.TotalSupply == nil && meta.TotalSupply != nil {
+			info.TotalSupply = meta.TotalSupply
+		}
+
+		s.tokenCache[addr] = info
+	}
+
+	if err := context.Cause(ctx); err != nil {
+		return err
+	}
+
+	for _, item := range pendingEvents {
+		s.dispatchEvent(ctx, block, item)
 	}
 	return nil
 }
@@ -470,6 +554,97 @@ func (s *Scanner) FetchBlocks(ctx context.Context, task job) ([]blockData, error
 		}
 	}
 	return blocks, nil
+}
+
+type pendingEvent struct {
+	logIndex uint
+	data     any
+}
+
+func (s *Scanner) dispatchEvent(
+	ctx context.Context,
+	block *rpc.ScanBlock,
+	item pendingEvent,
+) {
+	var eventType string
+	var tgEvent tg.TGEvent
+	var sendTG bool
+
+	switch item.data.(type) {
+	case *domain.UniV3PoolCreate:
+		eventType = "univ3.pool_created"
+		tgEvent = tg.TGEventNewV3Pool
+		sendTG = true
+	default:
+		slog.Warn("未支持的事件类型",
+			"type", fmt.Sprintf("%T", item.data))
+		return
+	}
+	if sendTG {
+		if err := s.publisher.PublishToChat(
+			ctx, "DM", tgEvent, item.data,
+		); err != nil {
+			slog.Error("投递事件通知失败",
+				"chain_id", s.ChainID, "error", err)
+		}
+	}
+	event, err := s.newEvent(
+		block,
+		item.logIndex,
+		eventType,
+		item.data,
+	)
+	if err != nil {
+		slog.Error("创建事件失败失败",
+			"chain_id", s.ChainID, "error", err)
+		return
+	}
+	if err := s.redisPublisher.Publish(
+		ctx,
+		event,
+	); err != nil {
+		slog.Error("redis推送失败",
+			"chain_id", s.ChainID, "error", err)
+	}
+	if err := s.DB.SaveScannerEvent(
+		ctx,
+		event,
+	); err != nil {
+		slog.Error("事件落库失败",
+			"chain_id", s.ChainID, "error", err)
+	}
+}
+
+func (s *Scanner) newEvent(
+	block *rpc.ScanBlock,
+	logIndex uint,
+	eventType string,
+	data any,
+) (*model.ScannerEvent, error) {
+	if block == nil || block.Timestamp == nil {
+		return nil, fmt.Errorf("missing block timestamp for %s", eventType)
+	}
+	seconds := s.cfg.EventTTLSeconds[eventType]
+	if seconds <= 0 || seconds > math.MaxInt64/int64(time.Second) {
+		return nil, fmt.Errorf("invalid TTL seconds for %s: %d", eventType, seconds)
+	}
+
+	payload, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("marshal event data failed: %w", err)
+	}
+
+	blockTime := time.Unix(int64(*block.Timestamp), 0).UTC()
+
+	return &model.ScannerEvent{
+		EventID:     fmt.Sprintf("%d:%s:%d", s.ChainID, block.Hash.Hex(), logIndex),
+		EventType:   eventType,
+		ChainID:     s.ChainID,
+		BlockNumber: block.Number,
+		BlockTime:   blockTime,
+		ExpiredAt:   blockTime.Add(time.Duration(seconds) * time.Second),
+		Data:        payload,
+	}, nil
 }
 
 func (s *Scanner) ParseUniV3PoolCreate(log *types.Log) (*domain.UniV3PoolCreate, error) {

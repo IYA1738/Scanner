@@ -57,6 +57,12 @@ func NewDatabase(ctx context.Context, cfg config.DatabaseConfig) (_ *Database, r
 	if err := initDB.AutoMigrate(&model.AddressBlacklist{}); err != nil {
 		return nil, fmt.Errorf("migrate address blacklist: %w", err)
 	}
+	if err := initDB.AutoMigrate(&model.ScannerEvent{}); err != nil {
+		return nil, fmt.Errorf("migrate Scanner event failed: %w", err)
+	}
+	if err := initDB.AutoMigrate(&model.TokenInfo{}); err != nil {
+		return nil, fmt.Errorf("migrate token info: %w", err)
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

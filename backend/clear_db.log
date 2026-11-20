@@ -1,0 +1,72 @@
+2026-11-13 00:00:01,703 ERROR 清理失败 table=scanner_events, filed=expired_at
+Traceback (most recent call last):
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 46, in main
+    count = clear_expired(table, target_field)
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 27, in clear_expired
+    c.execute(query)
+    ~~~~~~~~~^^^^^^^
+  File "/home/iya/scanner_demo/backend/.venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedTable: relation "scanner_events" does not exist
+LINE 1: DELETE FROM "scanner_events" WHERE "expired_at" <= CURRENT_T...
+                    ^
+2026-11-14 00:00:01,604 ERROR 清理失败 table=scanner_events, filed=expired_at
+Traceback (most recent call last):
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 46, in main
+    count = clear_expired(table, target_field)
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 27, in clear_expired
+    c.execute(query)
+    ~~~~~~~~~^^^^^^^
+  File "/home/iya/scanner_demo/backend/.venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedTable: relation "scanner_events" does not exist
+LINE 1: DELETE FROM "scanner_events" WHERE "expired_at" <= CURRENT_T...
+                    ^
+2026-11-15 00:00:01,680 ERROR 清理失败 table=scanner_events, filed=expired_at
+Traceback (most recent call last):
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 46, in main
+    count = clear_expired(table, target_field)
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 27, in clear_expired
+    c.execute(query)
+    ~~~~~~~~~^^^^^^^
+  File "/home/iya/scanner_demo/backend/.venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedTable: relation "scanner_events" does not exist
+LINE 1: DELETE FROM "scanner_events" WHERE "expired_at" <= CURRENT_T...
+                    ^
+2026-11-16 00:00:01,663 ERROR 清理失败 table=scanner_events, filed=expired_at
+Traceback (most recent call last):
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 46, in main
+    count = clear_expired(table, target_field)
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 27, in clear_expired
+    c.execute(query)
+    ~~~~~~~~~^^^^^^^
+  File "/home/iya/scanner_demo/backend/.venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedTable: relation "scanner_events" does not exist
+LINE 1: DELETE FROM "scanner_events" WHERE "expired_at" <= CURRENT_T...
+                    ^
+2026-11-17 00:00:01,620 ERROR 清理失败 table=scanner_events, filed=expired_at
+Traceback (most recent call last):
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 46, in main
+    count = clear_expired(table, target_field)
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 27, in clear_expired
+    c.execute(query)
+    ~~~~~~~~~^^^^^^^
+  File "/home/iya/scanner_demo/backend/.venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedTable: relation "scanner_events" does not exist
+LINE 1: DELETE FROM "scanner_events" WHERE "expired_at" <= CURRENT_T...
+                    ^
+2026-11-19 00:00:01,634 ERROR 清理失败 table=scanner_events, filed=expired_at
+Traceback (most recent call last):
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 46, in main
+    count = clear_expired(table, target_field)
+  File "/home/iya/scanner_demo/backend/scripts/clear_db.py", line 27, in clear_expired
+    c.execute(query)
+    ~~~~~~~~~^^^^^^^
+  File "/home/iya/scanner_demo/backend/.venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedTable: relation "scanner_events" does not exist
+LINE 1: DELETE FROM "scanner_events" WHERE "expired_at" <= CURRENT_T...
+                    ^

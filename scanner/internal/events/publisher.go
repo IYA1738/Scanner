@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"example.com/scanner_demo/scanner/internal/domain"
+	"example.com/scanner_demo/scanner/internal/database/model"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -20,7 +20,7 @@ func NewEventPublisher(client *redis.Client) *EventPublisher {
 
 func (p *EventPublisher) Publish(
 	ctx context.Context,
-	event domain.ScannerEvent,
+	event *model.ScannerEvent,
 ) error {
 	payload, err := json.Marshal(event)
 	if err != nil {

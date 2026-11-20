@@ -1,17 +1,21 @@
 package domain
 
 import (
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 )
 
 type TokenInfo struct {
-	Name      string
-	Symbol    string
-	Decimals  uint8
+	Name      *string
+	Symbol    *string
+	Decimals  *uint8
 	Creator   common.Address
 	CreatedAt time.Time
+
+	TotalSupply    *big.Int
+	RefreshEnabled bool
 }
 
 type UniV3PoolCreate struct {

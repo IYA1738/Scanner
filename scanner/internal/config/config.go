@@ -9,10 +9,11 @@ import (
 )
 
 type ScannerConfig struct {
-	WorkersNum  int              `json:"workers_num"`
-	BlockTimeMS int              `json:"block_time_ms"`
-	GroupSize   uint             `json:"group_size"`
-	Constants   ScannerConstants `json:"constants"`
+	WorkersNum      int              `json:"workers_num"`
+	BlockTimeMS     int              `json:"block_time_ms"`
+	GroupSize       uint             `json:"group_size"`
+	Constants       ScannerConstants `json:"constants"`
+	EventTTLSeconds map[string]int64 `json:"event_ttl_seconds"`
 }
 
 type ScannerConstants struct {

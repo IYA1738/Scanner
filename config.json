@@ -18,6 +18,9 @@
         "constants": {
           "uni_v3_factory":"0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7",
           "uni_v4_poolmanager":"0x28e2ea090877bf75740558f6bfb36a5ffee9e9df"
+        },
+        "event_ttl_seconds": {
+          "univ3.pool_created": 3600
         }
       }
     },
@@ -38,6 +41,9 @@
         "constants": {
           "uni_v3_factory":"0x1f7d7550B1b028f7571E69A784071F0205FD2EfA",
           "uni_v4_poolmanager":"0x8366a39CC670B4001A1121B8F6A443A643e40951"
+        },
+        "event_ttl_seconds": {
+          "univ3.pool_created": 3600
         }
       }
     }

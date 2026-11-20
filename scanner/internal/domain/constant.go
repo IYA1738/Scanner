@@ -34,4 +34,6 @@ var (
 	ERC20TransferTopic = common.HexToHash(
 		"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
 	)
+
+	Multicall3Addr = common.HexToAddress("0xcA11bde05977b3631167028862bE2a173976CA11")
 )
