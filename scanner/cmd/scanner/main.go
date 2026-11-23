@@ -69,62 +69,88 @@ func run(fromHead bool) (runErr error) {
 	manager.AddCleanup(redisClient.Close)
 	manager.AddCleanup(db.Close)
 
-	// 每个链有两个后台任务 每个任务最多报错一次
-	errCh := make(chan error, len(cfg.Chains)*2)
-
-	reportError := func(chainName, task string, err error) {
-		if err != nil && !errors.Is(err, context.Canceled) {
-			errCh <- fmt.Errorf("%s %s: %w", chainName, task, err)
-		}
-	}
-
 	eventPublisher := events.NewEventPublisher(redisClient)
 
+	kafkaPublisher, err := events.NewKafkaPublisher(
+		[]string{"localhost:9092"},
+		"chain.events.v1",
+	)
+
+	if err != nil {
+		return fmt.Errorf("初始化 Kafka publisher: %w", err)
+	}
+
+	manager.AddCleanup(func() error {
+		kafkaPublisher.Close()
+		return nil
+	})
+
+	manager.Go(kafkaPublisher.Run)
+
+	const chainRetryDelay = 5 * time.Second
 	for chainName, chainCfg := range cfg.Chains {
 		if signalCtx.Err() != nil {
 			return nil
 		}
-		initCtx, cancelInit := context.WithTimeout(manager.ctx, 10*time.Second)
-		client, err := rpc.NewRPCClient(initCtx, chainCfg.RPCCfg)
-		cancelInit()
-		if err != nil {
-			if signalCtx.Err() != nil {
-				return nil
-			}
-			return fmt.Errorf("%s 初始化 RPC: %w", chainName, err)
-		}
-		manager.AddCleanup(client.Close)
 
-		publisher, err := tg.NewTGPublisher(cfg.TG, log, chainCfg.ExplorerURL)
+		chainLog := log.With("chain", chainName, "chain_id", chainCfg.ChainID)
+		publisher, err := tg.NewTGPublisher(cfg.TG, chainLog, chainCfg.ExplorerURL)
 		if err != nil {
 			return fmt.Errorf("%s 初始化 TG: %w", chainName, err)
 		}
+		manager.Go(func(ctx context.Context) {
+			if err := publisher.ConsumeMessage(ctx); err != nil && ctx.Err() == nil {
+				chainLog.Warn("TG 消费停止", "error", err)
+			}
+		})
+		manager.Go(func(ctx context.Context) {
+			var chainScanner *scanner.Scanner
+			superviseChain(ctx, chainLog, chainRetryDelay, func(ctx context.Context) (attemptErr error) {
+				initCtx, cancelInit := context.WithTimeout(ctx, 10*time.Second)
+				client, err := rpc.NewRPCClient(initCtx, chainCfg.RPCCfg)
+				cancelInit()
+				if err != nil {
+					return fmt.Errorf("初始化 RPC: %w", err)
+				}
+				defer func() {
+					attemptErr = errors.Join(attemptErr, client.Close())
+				}()
 
-		s, err := scanner.NewScanner(
-			manager.ctx,
-			chainCfg.ScannerCfg,
-			int64(chainCfg.ChainID),
-			client,
-			db,
-			publisher,
-			eventPublisher,
-		)
-		if err != nil {
-			return fmt.Errorf("%s 初始化 Scanner: %w", chainName, err)
-		}
-		manager.Go(func(ctx context.Context) {
-			reportError(chainName, "TG消费", publisher.ConsumeMessage(ctx))
+				if chainScanner == nil {
+					chainScanner, err = scanner.NewScanner(
+						ctx, chainCfg.ScannerCfg, int64(chainCfg.ChainID),
+						client, db, publisher, eventPublisher, kafkaPublisher,
+					)
+					if err != nil {
+						return fmt.Errorf("初始化 Scanner: %w", err)
+					}
+				} else {
+					// 上一次 Run 已经返回并回收了自己的 worker。
+					chainScanner.Client = client
+				}
+
+				chainLog.Info("链服务已启动")
+				return chainScanner.Run(fromHead)
+			})
 		})
-		manager.Go(func(ctx context.Context) {
-			reportError(chainName, "扫链", s.Run(fromHead))
-		})
-		log.Info("链服务已启动", "chain", chainName)
 	}
-	select {
-	case <-signalCtx.Done():
-		log.Info("收到退出信号")
-		return nil
-	case err := <-errCh:
-		return err
+
+	<-signalCtx.Done()
+	log.Info("收到退出信号")
+	return nil
+}
+
+func superviseChain(ctx context.Context, log *slog.Logger, retryDelay time.Duration, runOnce func(context.Context) error) {
+	for ctx.Err() == nil {
+		err := runOnce(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		log.Warn("本链停止，等待重试", "error", err, "retry_in", retryDelay.String())
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(retryDelay):
+		}
 	}
 }

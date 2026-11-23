@@ -179,17 +179,28 @@ func (t *TGPublisher) buildNewV3PoolNotify(event *domain.UniV3PoolCreate) string
 
 	return fmt.Sprintf(
 		"<b>V3池子创建</b>\n"+
-			"<b>Token0:</b> <code>%s</code>\n"+
-			"<b>Token1:</b> <code>%s</code>\n"+
+			"<b>Token0%s:</b> <code>%s</code>\n"+
+			"<b>Token1%s:</b> <code>%s</code>\n"+
 			"手续费: <b>%s%%</b>\n"+
 			"TickSpacing: %d\n"+
 			"<b>池子地址</b>: <code>%s</code>\n"+
 			"🔗<a href=\"%s\">查看池子</a>",
-		event.Token0.Hex(),
-		event.Token1.Hex(),
+		tokenSymbolSuffix(event.Token0Info), event.Token0.Hex(),
+		tokenSymbolSuffix(event.Token1Info), event.Token1.Hex(),
 		fee,
 		event.TickSpacing,
 		event.Pool.Hex(),
 		html.EscapeString(poolURL),
 	)
+}
+
+func tokenSymbolSuffix(info *domain.PoolTokenInfo) string {
+	if info == nil || info.Symbol == nil {
+		return ""
+	}
+	symbol := strings.Join(strings.Fields(*info.Symbol), " ")
+	if symbol == "" {
+		return ""
+	}
+	return " (" + html.EscapeString(symbol) + ")"
 }

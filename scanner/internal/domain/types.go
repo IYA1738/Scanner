@@ -18,10 +18,18 @@ type TokenInfo struct {
 	RefreshEnabled bool
 }
 
+type PoolTokenInfo struct {
+	Name     *string `json:",omitempty"`
+	Symbol   *string `json:",omitempty"`
+	Decimals *uint8  `json:",omitempty"`
+}
+
 type UniV3PoolCreate struct {
 	Token0      common.Address
 	Token1      common.Address
 	Fee         uint32
 	TickSpacing int32
 	Pool        common.Address
+	Token0Info  *PoolTokenInfo `json:",omitempty"`
+	Token1Info  *PoolTokenInfo `json:",omitempty"`
 }

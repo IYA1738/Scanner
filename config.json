@@ -29,7 +29,7 @@
       "explorer_url":"https://robinhoodchain.blockscout.com",
       "rpc_config": {
         "http_url": ["https://robinhood-rpc.publicnode.com", "https://rpc.degenprotocol.io/robinhood", "https://rpc-robinhood.blockmachine.io", "https://robinhood.api.pocket.network"],
-        "ws_url": ["wss://robinhood.api.pocket.network"],
+        "ws_url": ["wss://robinhood-rpc.publicnode.com"],
         "rpc_timeout": 10,
         "retry_count": 3,
         "retry_interval": 2

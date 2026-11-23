@@ -47,8 +47,10 @@ type Scanner struct {
 	publisher      *tg.TGPublisher
 	tokenCache     map[common.Address]domain.TokenInfo
 	cfg            config.ScannerConfig
+	started        bool
 	nextBlock      uint64
 	redisPublisher *events.EventPublisher
+	kafkaPublisher *events.KafkaPublisher
 }
 
 func NewScanner(
@@ -59,6 +61,7 @@ func NewScanner(
 	db *database.Database,
 	publisher *tg.TGPublisher,
 	redisPublisher *events.EventPublisher,
+	kafkaPublisher *events.KafkaPublisher,
 ) (*Scanner, error) {
 	s := &Scanner{
 		ctx:            ctx,
@@ -69,6 +72,7 @@ func NewScanner(
 		publisher:      publisher,
 		tokenCache:     make(map[common.Address]domain.TokenInfo),
 		redisPublisher: redisPublisher,
+		kafkaPublisher: kafkaPublisher,
 	}
 
 	tokens, err := db.GetTokenInfoByChain(
@@ -127,26 +131,31 @@ func (s *Scanner) activeWorkers(blockNum uint64, k uint64) int {
 	return int(res)
 }
 
+// Run 首次选择扫链起点，后续调用从上次中断的区块继续。调用不可并发。
 func (s *Scanner) Run(fromHead bool) error {
-	s.nextBlock = 0
-	if !fromHead {
-		cursor, err := s.DB.GetScannerCursor(s.ctx, s.ChainID)
-		if err != nil {
-			return err
+	if !s.started {
+		if !fromHead {
+			cursor, err := s.DB.GetScannerCursor(s.ctx, s.ChainID)
+			if err != nil {
+				return err
+			}
+			if cursor != nil {
+				s.nextBlock = cursor.BlockNumber + 1
+			}
 		}
-		if cursor != nil {
-			s.nextBlock = cursor.BlockNumber + 1
-		}
-	}
 
-	if s.nextBlock == 0 {
-		head, err := s.Client.BlockNumber(s.ctx)
-		if err != nil {
-			return err
+		if s.nextBlock == 0 {
+			head, err := s.Client.BlockNumber(s.ctx)
+			if err != nil {
+				return err
+			}
+			s.nextBlock = head
 		}
-		s.nextBlock = head
+		s.started = true
+		slog.Info("扫链起点", "chain_id", s.ChainID, "block", s.nextBlock, "from_head", fromHead)
+	} else {
+		slog.Info("恢复扫链", "chain_id", s.ChainID, "block", s.nextBlock)
 	}
-	slog.Info("扫链起点", "chain_id", s.ChainID, "block", s.nextBlock, "from_head", fromHead)
 
 	// 扫链主循环
 	for {
@@ -433,9 +442,25 @@ func (s *Scanner) ProcessBlock(ctx context.Context, block *rpc.ScanBlock, receip
 	}
 
 	for _, item := range pendingEvents {
+		if pool, ok := item.data.(*domain.UniV3PoolCreate); ok {
+			pool.Token0Info = s.poolTokenInfo(pool.Token0)
+			pool.Token1Info = s.poolTokenInfo(pool.Token1)
+		}
 		s.dispatchEvent(ctx, block, item)
 	}
 	return nil
+}
+
+func (s *Scanner) poolTokenInfo(addr common.Address) *domain.PoolTokenInfo {
+	info := s.tokenCache[addr]
+	if info.Name == nil && info.Symbol == nil && info.Decimals == nil {
+		return nil
+	}
+	return &domain.PoolTokenInfo{
+		Name:     info.Name,
+		Symbol:   info.Symbol,
+		Decimals: info.Decimals,
+	}
 }
 
 func (s *Scanner) Worker(
@@ -595,9 +620,15 @@ func (s *Scanner) dispatchEvent(
 		item.data,
 	)
 	if err != nil {
-		slog.Error("创建事件失败失败",
+		slog.Error("创建事件失败",
 			"chain_id", s.ChainID, "error", err)
 		return
+	}
+	if event.EventType == "univ3.pool_created" && !s.kafkaPublisher.TryEnqueue(*event) {
+		slog.Warn("Kafka 发送队列已满，跳过事件",
+			"event_id", event.EventID,
+			"chain_id", event.ChainID,
+		)
 	}
 	if err := s.redisPublisher.Publish(
 		ctx,
